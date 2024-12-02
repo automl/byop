@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+import numpy as np
 import pytest
 from more_itertools import all_unique
 from pytest_cases import case, parametrize, parametrize_with_cases
@@ -14,6 +15,7 @@ from amltk.pipeline.components import Choice
 from amltk.profiling import Timer
 
 if TYPE_CHECKING:
+    from amltk.optimization.optimizers.hebo import HEBOOptimizer
     from amltk.optimization.optimizers.neps import NEPSOptimizer
     from amltk.optimization.optimizers.optuna import OptunaOptimizer
     from amltk.optimization.optimizers.smac import SMACOptimizer
@@ -85,6 +87,32 @@ def opt_optuna(metric: Metric, tmp_path: Path) -> OptunaOptimizer:
 
     pipeline = Component(_A, name="hi", space={"a": (1, 10)})
     return OptunaOptimizer.create(
+        space=pipeline,
+        metrics=metric,
+        seed=42,
+        bucket=tmp_path,
+    )
+
+
+# NOTE: HEBO does not support unbounded optimals in metrics
+hebo_metrics = [
+    Metric("score_bounded", minimize=False, bounds=(0, 1)),
+    Metric("score_unbounded", minimize=False, bounds=(-np.inf, 10)),
+    Metric("loss_unbounded", minimize=True, bounds=(-10, np.inf)),
+    Metric("loss_bounded", minimize=True, bounds=(-1, 1)),
+]
+
+
+@case
+@parametrize("metric", [*hebo_metrics, hebo_metrics])  # Single obj and multi
+def opt_hebo(metric: Metric, tmp_path: Path) -> HEBOOptimizer:
+    try:
+        from amltk.optimization.optimizers.hebo import HEBOOptimizer
+    except ImportError:
+        pytest.skip("HEBO is not installed")
+
+    pipeline = Component(_A, name="hi", space={"a": (1, 10)})
+    return HEBOOptimizer.create(
         space=pipeline,
         metrics=metric,
         seed=42,
